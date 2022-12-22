@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 source ./scripts/lib/build.fish
 
-set -xg IDENTITY "Developer ID Application: ArangoDB GmbH (W7UC4UQXPV)"
+set -xg IDENTITY "Apple Development: Bernard Gaitho (7XDS379ECN)"
 
 # sanity checks
 if test -z "$NOTARIZE_USER"
@@ -70,6 +70,7 @@ function setupApp
 end
 
 function codeSignApp
+  echo "Signing $APPNAME, $IDENTITY ...."
   set -l CODESIGN_OPTS --entitlements $WORKDIR/dmg/entitlement.xml --verbose --force --timestamp --sign $IDENTITY
 
   and for file in $APPNAME/Contents/Resources/opt/arangodb/bin/* $APPNAME/Contents/Resources/opt/arangodb/sbin/*
