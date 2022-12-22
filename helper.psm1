@@ -1111,7 +1111,7 @@ Function checkoutEnterprise
         Set-Location $global:ARANGODIR
         If (-Not(Test-Path -PathType Container -Path "enterprise"))
         {
-            proc -process "git" -argument "clone https://@github.com/arangodb/enterprise" -logfile $false -priority "Normal"
+            proc -process "git" -argument "clone ssh://git@github.com/arangodb/enterprise" -logfile $false -priority "Normal"
         }
         Pop-Location
     }

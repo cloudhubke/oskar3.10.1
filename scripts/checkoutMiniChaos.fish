@@ -32,7 +32,7 @@ end
 cd $INNERWORKDIR/ArangoDB
 if test ! -d mini-chaos
   echo == (date) == started clone 'mini-chaos'
-  and git clone --progress $mirror https://@github.com/arangodb/mini-chaos
+  and git clone --progress $mirror ssh://git@github.com/arangodb/mini-chaos
   and echo == (date) == finished clone 'mini-chaos'
   and if test -d /mirror/mini-chaos.git
     cd mini-chaos
