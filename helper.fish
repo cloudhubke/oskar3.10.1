@@ -177,7 +177,6 @@ function defaultArchitecture
   else
     set -gx DEFAULT_ARCHITECTURE $argv[1]
   end
-
   return 0
 end
 

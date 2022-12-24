@@ -394,7 +394,7 @@ function switchBranches
   and set -gx MINIMAL_DEBUG_INFO (findMinimalDebugInfo)
   and findDefaultArchitecture
   and findRequiredCompiler
-  and findUseARM
+  # and findUseARM
 end
 
 function clearWorkdir
@@ -403,7 +403,10 @@ end
 
 function buildArangoDB
   checkoutIfNeeded
+  and oskarOpenSSL
+  and findRequiredOpenSSL
   and findDefaultArchitecture
+  and findUseARM
   and findRequiredCompiler
   and findUseARM
   and findRequiredMinMacOS
@@ -416,10 +419,11 @@ function buildArangoDB
   end
 end
 
+
 function makeArangoDB
   findDefaultArchitecture
   and findRequiredCompiler
-  and findUseARM
+  # and findUseARM
   and findRequiredMinMacOS
   and prepareOpenSSL
   and runLocal $SCRIPTSDIR/makeArangoDB.fish $argv
@@ -567,6 +571,7 @@ function buildCommunityPackage
     return 1
   end
 end
+
 
 function buildTarGzPackage
   pushd $INNERWORKDIR/ArangoDB/build
