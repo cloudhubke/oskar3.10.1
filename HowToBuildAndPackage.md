@@ -4,20 +4,22 @@ ArangoDB no longer uses AppleClang to compile.
 
 Use LLVM clang.
 
-download from https://github.com/llvm/llvm-project/releases/tag/llvmorg-14.0.6
+install llvm
+
+```
+   brew install llvm@14
+```
 
 after you extract in a folder,
 
 place the environment variables:
 
 ```
-export PATH="/Users/bernardgaitho/clang+llvm-14.0.6-x86_64-apple-darwin/bin:$PATH"
+export PATH="/usr/local/opt/llvm@14/bin:$PATH"
 
 
-export CC="/Users/bernardgaitho/clang+llvm-14.0.6-x86_64-apple-darwin/bin/clang"
+export CC="/usr/local/opt/llvm@14/bin/clang"
 export CXX:=$(CC)++
-
-
 
 ```
 
@@ -63,6 +65,9 @@ fish
 source config/environment.fish
 source helper.fish
 community
+oskarOpenSSL
+findDefaultArchitecture
+findArangoDBVersion
 
 makeArangoDB
 ```
@@ -88,9 +93,11 @@ build/bin/arangosh
 fish
 source config/environment.fish
 source helper.fish
-findArangoDBVersion
 community
 maintainerOff
+oskarOpenSSL
+findDefaultArchitecture
+findArangoDBVersion
 
 buildCommunityPackage
 
