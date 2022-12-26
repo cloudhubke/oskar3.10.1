@@ -16,6 +16,62 @@ if test "$ARCH" = "arm64"
   set CCACHEBINPATH /opt/homebrew/opt/ccache/libexec
 end
 
+
+set -gx UBUNTUBUILDIMAGE3_NAME arangodb/ubuntubuildarangodb3-$ARCH
+set -gx UBUNTUBUILDIMAGE3_TAG 18
+set -gx UBUNTUBUILDIMAGE3 $UBUNTUBUILDIMAGE3_NAME:$UBUNTUBUILDIMAGE3_TAG
+
+set -gx UBUNTUBUILDIMAGE4_NAME arangodb/ubuntubuildarangodb4-$ARCH
+set -gx UBUNTUBUILDIMAGE4_TAG 19
+set -gx UBUNTUBUILDIMAGE4 $UBUNTUBUILDIMAGE4_NAME:$UBUNTUBUILDIMAGE4_TAG
+
+set -gx UBUNTUBUILDIMAGE5_NAME arangodb/ubuntubuildarangodb5-$ARCH
+set -gx UBUNTUBUILDIMAGE5_TAG 12
+set -gx UBUNTUBUILDIMAGE5 $UBUNTUBUILDIMAGE5_NAME:$UBUNTUBUILDIMAGE5_TAG
+
+set -gx UBUNTUBUILDIMAGE6_NAME arangodb/ubuntubuildarangodb6-$ARCH
+set -gx UBUNTUBUILDIMAGE6_TAG 5
+set -gx UBUNTUBUILDIMAGE6 $UBUNTUBUILDIMAGE6_NAME:$UBUNTUBUILDIMAGE6_TAG
+
+set -gx UBUNTUPACKAGINGIMAGE arangodb/ubuntupackagearangodb-$ARCH:1
+
+set -gx ALPINEBUILDIMAGE3_NAME arangodb/alpinebuildarangodb3-$ARCH
+set -gx ALPINEBUILDIMAGE3_TAG 21
+set -gx ALPINEBUILDIMAGE3 $ALPINEBUILDIMAGE3_NAME:$ALPINEBUILDIMAGE3_TAG
+
+set -gx ALPINEBUILDIMAGE4_NAME arangodb/alpinebuildarangodb4-$ARCH
+set -gx ALPINEBUILDIMAGE4_TAG 22
+set -gx ALPINEBUILDIMAGE4 $ALPINEBUILDIMAGE4_NAME:$ALPINEBUILDIMAGE4_TAG
+
+set -gx ALPINEBUILDIMAGE5_NAME arangodb/alpinebuildarangodb5-$ARCH
+set -gx ALPINEBUILDIMAGE5_TAG 12
+set -gx ALPINEBUILDIMAGE5 $ALPINEBUILDIMAGE5_NAME:$ALPINEBUILDIMAGE5_TAG
+
+set -gx ALPINEBUILDIMAGE6_NAME arangodb/alpinebuildarangodb6-$ARCH
+set -gx ALPINEBUILDIMAGE6_TAG 4
+set -gx ALPINEBUILDIMAGE6 $ALPINEBUILDIMAGE6_NAME:$ALPINEBUILDIMAGE6_TAG
+
+set -gx ALPINEUTILSIMAGE_NAME arangodb/alpineutils-$ARCH
+set -gx ALPINEUTILSIMAGE_TAG 4
+set -gx ALPINEUTILSIMAGE $ALPINEUTILSIMAGE_NAME:$ALPINEUTILSIMAGE_TAG
+
+set -gx CENTOSPACKAGINGIMAGE_NAME arangodb/centospackagearangodb-$ARCH
+set -gx CENTOSPACKAGINGIMAGE_TAG 3
+set -gx CENTOSPACKAGINGIMAGE $CENTOSPACKAGINGIMAGE_NAME:$CENTOSPACKAGINGIMAGE_TAG
+
+set -gx CPPCHECKIMAGE_NAME arangodb/cppcheck-$ARCH
+set -gx CPPCHECKIMAGE_TAG 7
+set -gx CPPCHECKIMAGE $CPPCHECKIMAGE_NAME:$CPPCHECKIMAGE_TAG
+
+set -gx LDAPIMAGE_NAME arangodb/ldap-test-$ARCH
+set -gx LDAPIMAGE_TAG 1
+set -gx LDAPIMAGE $LDAPIMAGE_NAME:$LDAPIMAGE_TAG
+
+set -gx LDAPDOCKERCONTAINERNAME ldapserver1
+set -gx LDAP2DOCKERCONTAINERNAME ldapserver2
+set -gx LDAPNETWORK ldaptestnet
+
+
 rm -f $SCRIPTSDIR/tools/sccache
 ln -s $SCRIPTSDIR/tools/sccache-apple-darwin-$ARCH $SCRIPTSDIR/tools/sccache
 
@@ -408,6 +464,21 @@ function buildArangoDB
   and findUseARM
   and findRequiredMinMacOS
   and prepareOpenSSL
+  and runLocal $SCRIPTSDIR/buildArangoDB.fish $argv
+  set -l s $status
+  if test $s -ne 0
+    echo Build error!
+    return $s
+  end
+end
+
+function buildArangoDB
+  checkoutIfNeeded
+  and findDefaultArchitecture
+  and findRequiredCompiler
+  and findUseARM
+  and findRequiredMinMacOS
+  and prepareOpenSSL
   and runLocal $SCRIPTSDIR/buildMacOs.fish $argv
   set -l s $status
   if test $s -ne 0
@@ -437,6 +508,253 @@ end
 function makeStaticArangoDB
   makeArangoDB $argv
 end
+
+# ==============================================================================
+# Build a Debian package
+# ==============================================================================
+function runInContainer
+  if test -z "$SSH_AUTH_SOCK"
+    sudo killall --older-than 8h ssh-agent 2>&1 > /dev/null
+    eval (ssh-agent -c) > /dev/null
+    for key in ~/.ssh/id_rsa ~/.ssh/id_ed25519 ~/.ssh/id_deploy
+      if test -f $key
+        ssh-add $key
+      end
+    end
+    set -l agentstarted 1
+  else
+    set -l agentstarted ""
+  end
+
+  set -l mirror
+
+  if test -n "$GITHUB_MIRROR" -a -d "$GITHUB_MIRROR/mirror"
+    set mirror -v $GITHUB_MIRROR/mirror:/mirror
+  end
+
+  # Run script in container in background, but print output and react to
+  # a TERM signal to the shell or to a foreground subcommand. Note that the
+  # container process itself will run as root and will be immune to SIGTERM
+  # from a regular user. Therefore we have to do some Eiertanz to stop it
+  # if we receive a TERM outside the container. Note that this does not
+  # cover SIGINT, since this will directly abort the whole function.
+  set c (docker run -d --cap-add=SYS_PTRACE --privileged --security-opt seccomp=unconfined \
+             -v $WORKDIR/work/:$INNERWORKDIR \
+             -v $SSH_AUTH_SOCK:/ssh-agent \
+             -v "$WORKDIR/jenkins/helper":"$WORKSPACE/jenkins/helper" \
+             -v "$WORKDIR/scripts/":"/scripts" \
+             $mirror \
+             -e ARANGODB_DOCS_BRANCH="$ARANGODB_DOCS_BRANCH" \
+             -e ARANGODB_PACKAGES="$ARANGODB_PACKAGES" \
+             -e ARANGODB_REPO="$ARANGODB_REPO" \
+             -e ARANGODB_VERSION="$ARANGODB_VERSION" \
+             -e DUMPDEVICE=$DUMPDEVICE \
+             -e ARCH="$ARCH" \
+             -e SAN="$SAN" \
+             -e SAN_MODE="$SAN_MODE" \
+             -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+             -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+             -e BUILD_SEPP="$BUILD_SEPP" \
+             -e BUILDMODE="$BUILDMODE" \
+             -e CCACHEBINPATH="$CCACHEBINPATH" \
+             -e COMPILER_VERSION=(echo (string replace -r '[_\-].*$' "" $COMPILER_VERSION)) \
+             -e COVERAGE="$COVERAGE" \
+             -e DEFAULT_ARCHITECTURE="$DEFAULT_ARCHITECTURE" \
+             -e ENTERPRISEEDITION="$ENTERPRISEEDITION" \
+             -e FORCE_DISABLE_AVX="$FORCE_DISABLE_AVX" \
+             -e GID=(id -g) \
+             -e GIT_CURL_VERBOSE="$GIT_CURL_VERBOSE" \
+             -e GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" \
+             -e GIT_TRACE="$GIT_TRACE" \
+             -e GIT_TRACE_PACKET="$GIT_TRACE_PACKET" \
+             -e INNERWORKDIR="$INNERWORKDIR" \
+             -e IONICE="$IONICE" \
+             -e JEMALLOC_OSKAR="$JEMALLOC_OSKAR" \
+             -e KEYNAME="$KEYNAME" \
+             -e LDAPHOST="$LDAPHOST" \
+             -e LDAPHOST2="$LDAPHOST2" \
+             -e MAINTAINER="$MAINTAINER" \
+             -e MINIMAL_DEBUG_INFO="$MINIMAL_DEBUG_INFO" \
+             -e NODE_NAME="$NODE_NAME" \
+             -e NOSTRIP="$NOSTRIP" \
+             -e NO_RM_BUILD="$NO_RM_BUILD" \
+             -e ONLYGREY="$ONLYGREY" \
+             -e OPENSSL_VERSION="$OPENSSL_VERSION" \
+             -e PACKAGE_STRIP="$PACKAGE_STRIP" \
+             -e PARALLELISM="$PARALLELISM" \
+             -e PLATFORM="$PLATFORM" \
+             -e SCCACHE_BUCKET="$SCCACHE_BUCKET" \
+             -e SCCACHE_ENDPOINT="$SCCACHE_ENDPOINT" \
+             -e SCCACHE_GCS_BUCKET="$SCCACHE_GCS_BUCKET" \
+             -e SCCACHE_GCS_KEY_PATH="$SCCACHE_GCS_KEY_PATH" \
+             -e SCCACHE_IDLE_TIMEOUT="$SCCACHE_IDLE_TIMEOUT" \
+             -e SCCACHE_MEMCACHED="$SCCACHE_MEMCACHED" \
+             -e SCCACHE_REDIS="$SCCACHE_REDIS" \
+             -e SCRIPTSDIR="$SCRIPTSDIR" \
+             -e SHOW_DETAILS="$SHOW_DETAILS" \
+             -e SKIPGREY="$SKIPGREY" \
+             -e SKIPNONDETERMINISTIC="$SKIPNONDETERMINISTIC" \
+             -e SKIPTIMECRITICAL="$SKIPTIMECRITICAL" \
+             -e SKIP_MAKE="$SKIP_MAKE" \
+             -e SSH_AUTH_SOCK=/ssh-agent \
+             -e STORAGEENGINE="$STORAGEENGINE" \
+             -e TEST="$TEST" \
+             -e TESTSUITE="$TESTSUITE" \
+             -e UID=(id -u) \
+             -e USE_ARM="$USE_ARM" \
+             -e USE_CCACHE="$USE_CCACHE" \
+             -e USE_STRICT_OPENSSL="$USE_STRICT_OPENSSL" \
+             -e VERBOSEBUILD="$VERBOSEBUILD" \
+             -e VERBOSEOSKAR="$VERBOSEOSKAR" \
+             -e WORKSPACE="$WORKSPACE" \
+             -e PROMTOOL_PATH="$PROMTOOL_PATH" \
+             $argv)
+  function termhandler --on-signal TERM --inherit-variable c
+    if test -n "$c"
+      docker stop $c >/dev/null
+      docker rm $c >/dev/null
+    end
+  end
+  docker logs -f $c          # print output to stdout
+  docker stop $c >/dev/null  # happens when the previous command gets a SIGTERM
+  set s (docker inspect $c --format "{{.State.ExitCode}}")
+  docker rm $c >/dev/null
+  functions -e termhandler
+  # Cleanup ownership:
+  docker run \
+      -v $WORKDIR/work:$INNERWORKDIR \
+      -e UID=(id -u) \
+      -e GID=(id -g) \
+      -e INNERWORKDIR=$INNERWORKDIR \
+      --rm \
+      $ALPINEUTILSIMAGE $SCRIPTSDIR/recursiveChown.fish
+
+  if test -n "$agentstarted"
+    ssh-agent -k > /dev/null
+    set -e SSH_AUTH_SOCK
+    set -e SSH_AGENT_PID
+  end
+  return $s
+end
+
+
+function buildDebianPackage
+  if test ! -d $WORKDIR/work/ArangoDB/build
+    echo buildDebianPackage: build directory does not exist
+    return 1
+  end
+
+  set -l pd "default"
+
+  if test -d $WORKDIR/debian/$ARANGODB_PACKAGES
+    set pd "$ARANGODB_PACKAGES"
+  end
+
+  # This assumes that a static build has already happened
+  # Must have set ARANGODB_DEBIAN_UPSTREAM and ARANGODB_DEBIAN_REVISION,
+  # for example by running findArangoDBVersion.
+  set -l v "$ARANGODB_DEBIAN_UPSTREAM-$ARANGODB_DEBIAN_REVISION"
+  set -l ch $WORKDIR/work/debian/changelog
+  set -l SOURCE $WORKDIR/debian/$pd
+  set -l TARGET $WORKDIR/work/debian
+  set -l EDITION arangodb3
+  set -l EDITIONFOLDER $SOURCE/community
+  set -l ARCH (dpkg --print-architecture)
+
+  if test "$ENTERPRISEEDITION" = "On"
+    echo Building enterprise edition debian package...
+    set EDITION arangodb3e
+    set EDITIONFOLDER $SOURCE/enterprise
+  else
+    echo Building community edition debian package...
+  end
+
+  rm -rf $TARGET
+  and cp -a $EDITIONFOLDER $TARGET
+  and for f in arangodb3.init arangodb3.service compat config templates preinst prerm postinst postrm rules
+    cp $SOURCE/common/$f $TARGET/$f
+    sed -e "s/@EDITION@/$EDITION/g" -i $TARGET/$f
+    if test $PACKAGE_STRIP = All
+      sed -i -e "s/@DEBIAN_STRIP_ALL@//"                 -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_EXCEPT_ARANGOD@/echo /" -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_NONE@/echo /"           -i $TARGET/$f
+    else if test $PACKAGE_STRIP = ExceptArangod
+      sed -i -e "s/@DEBIAN_STRIP_ALL@/echo /"            -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_EXCEPT_ARANGOD@//"      -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_NONE@/echo /"           -i $TARGET/$f
+    else
+      sed -i -e "s/@DEBIAN_STRIP_ALL@/echo /"            -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_EXCEPT_ARANGOD@/echo /" -i $TARGET/$f
+      sed -i -e "s/@DEBIAN_STRIP_NONE@//"                -i $TARGET/$f
+    end
+  end
+  and echo -n "$EDITION " > $ch
+  and cp -a $SOURCE/common/source $TARGET
+  and echo "($v) UNRELEASED; urgency=medium" >> $ch
+  and echo >> $ch
+  and echo "  * New version." >> $ch
+  and echo >> $ch
+  and echo -n " -- ArangoDB <hackers@arangodb.com>  " >> $ch
+  and date -R >> $ch
+  and sed -i "s/@ARCHITECTURE@/$ARCH/g" $TARGET/control
+  and runInContainer $UBUNTUPACKAGINGIMAGE $SCRIPTSDIR/buildDebianPackage.fish
+  set -l s $status
+  if test $s -ne 0
+    echo Error when building a debian package
+    return $s
+  end
+end
+
+function downloadStarterWithAlpine
+  mkdir -p $WORKDIR/work/$THIRDPARTY_BIN
+  and runInContainer $ALPINEUTILSIMAGE $SCRIPTSDIR/downloadStarter.fish $INNERWORKDIR/$THIRDPARTY_BIN $argv
+  and convertSItoJSON
+end
+
+function findStaticBuildImage
+      echo $ALPINEBUILDIMAGE
+end
+function findStaticBuildScript
+      echo buildAlpine3.fish
+end
+
+
+
+function buildStaticArangoDBWithAlpine
+  checkoutIfNeeded
+  and findRequiredCompiler
+  and findRequiredOpenSSL
+  and findDefaultArchitecture
+  and findUseARM
+  and runInContainer (findStaticBuildImage) $SCRIPTSDIR/(findStaticBuildScript) $argv
+  set -l s $status
+  if test $s -ne 0
+    echo Build error!
+    return $s
+  end
+end
+
+function buildCommunityPackageWithAlpine
+  # Must have set ARANGODB_VERSION and ARANGODB_PACKAGE_REVISION and
+  # ARANGODB_FULL_VERSION, for example by running findArangoDBVersion.
+  sanOff
+  and maintainerOff
+  and releaseMode
+  and community
+  and set -xg NOSTRIP 1
+  and buildStaticArangoDBWithAlpine
+  and downloadStarterWithAlpine
+  and buildDebianPackage
+
+  if test $status -ne 0
+    echo Building community release failed.
+    return 1
+  end
+end
+
+# ==============================================================================
+# End Additions
+# ==============================================================================
 
 function oskar
   checkoutIfNeeded
