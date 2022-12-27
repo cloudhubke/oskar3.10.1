@@ -671,8 +671,9 @@ function buildPackage
   # Must have set ARANGODB_VERSION and ARANGODB_PACKAGE_REVISION and
   # ARANGODB_FULL_VERSION, for example by running findArangoDBVersion.
   buildDebianPackage
-  and buildRPMPackage
-  and buildTarGzPackage
+  # Edited by Gaitho to remove RPM and TGZ
+  # and buildRPMPackage
+  # and buildTarGzPackage
 end
 
 function buildEnterprisePackage
