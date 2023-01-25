@@ -93,6 +93,9 @@
     "vector": "cpp",
     "algorithm": "cpp",
     "*.ipp": "cpp",
-    "csetjmp": "cpp"
+    "csetjmp": "cpp",
+    "__memory": "cpp",
+    "filesystem": "cpp",
+    "scoped_allocator": "cpp"
   }
 }
