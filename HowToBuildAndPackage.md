@@ -10,6 +10,15 @@ install llvm
    brew install llvm@14
 ```
 
+make sure also you have installed the following packages
+
+```
+   brew install cmake
+   brew install ninja
+   brew install sccache
+   brew install md5sha1sum
+```
+
 after you extract in a folder,
 
 place the environment variables:
